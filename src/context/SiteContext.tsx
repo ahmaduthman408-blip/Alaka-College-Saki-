@@ -178,7 +178,7 @@ export const SiteProvider: React.FC<{children: React.ReactNode}> = ({ children }
         newData.heroTitle2 !== undefined || newData.heroSubtitle !== undefined ||
         newData.welcomeImage !== undefined || newData.principalImage !== undefined
       ) {
-        await supabase.from('site_settings').upsert({
+        const { error } = await supabase.from('site_settings').upsert({
           id: 1,
           hero_image: updated.heroImage,
           hero_title_1: updated.heroTitle1,
@@ -187,33 +187,39 @@ export const SiteProvider: React.FC<{children: React.ReactNode}> = ({ children }
           welcome_image: updated.welcomeImage,
           principal_image: updated.principalImage
         });
+        if (error) console.error("Error saving site settings:", error);
       }
 
       // If gallery changed
       if (newData.gallery !== undefined) {
-        await supabase.from('gallery').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        const { error: delErr } = await supabase.from('gallery').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (delErr) console.error("Error clearing gallery:", delErr);
         if (updated.gallery.length > 0) {
-          await supabase.from('gallery').insert(
+          const { error: insErr } = await supabase.from('gallery').insert(
             updated.gallery.map(url => ({ image_url: url }))
           );
+          if (insErr) console.error("Error saving gallery:", insErr);
         }
       }
 
       // If videos changed
       if (newData.videos !== undefined) {
-        await supabase.from('videos').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        const { error: delErr } = await supabase.from('videos').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (delErr) console.error("Error clearing videos:", delErr);
         if (updated.videos.length > 0) {
-          await supabase.from('videos').insert(
+          const { error: insErr } = await supabase.from('videos').insert(
             updated.videos.map(v => ({ title: v.title, video_url: v.url }))
           );
+          if (insErr) console.error("Error saving videos:", insErr);
         }
       }
 
       // If facilities changed
       if (newData.facilities !== undefined) {
-        await supabase.from('facilities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        const { error: delErr } = await supabase.from('facilities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (delErr) console.error("Error clearing facilities:", delErr);
         if (updated.facilities.length > 0) {
-          await supabase.from('facilities').insert(
+          const { error: insErr } = await supabase.from('facilities').insert(
             updated.facilities.map(f => ({
               title: f.title,
               description: f.description,
@@ -222,10 +228,11 @@ export const SiteProvider: React.FC<{children: React.ReactNode}> = ({ children }
               is_reverse: f.reverse
             }))
           );
+          if (insErr) console.error("Error saving facilities:", insErr);
         }
       }
     } catch (error) {
-      console.error("Error updating Supabase:", error);
+      console.error("Error in Supabase update block:", error);
     }
   };
 
