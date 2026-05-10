@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 
 export default function Admin() {
   const [password, setPassword] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem('adminAuth') === 'true');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState<'hero' | 'gallery' | 'videos' | 'facilities'>('hero');
   const { data, updateData } = useSiteData();
 
@@ -14,7 +14,6 @@ export default function Admin() {
     e.preventDefault();
     if (password === 'Abu Nasir') {
       setIsAuthenticated(true);
-      sessionStorage.setItem('adminAuth', 'true');
     } else {
       alert('Incorrect Password');
     }
@@ -102,7 +101,6 @@ export default function Admin() {
           <button 
             onClick={() => {
               setIsAuthenticated(false);
-              sessionStorage.removeItem('adminAuth');
             }}
             className="flex items-center gap-2 text-slate-400 hover:text-white"
           >

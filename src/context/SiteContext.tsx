@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export interface VideoData {
   id: string;
@@ -7,6 +8,7 @@ export interface VideoData {
 }
 
 export interface FacilityData {
+  id?: string;
   title: string;
   description: string;
   image1: string;
@@ -75,35 +77,160 @@ const defaultData: SiteData = {
 interface SiteContextType {
   data: SiteData;
   updateData: (newData: Partial<SiteData>) => void;
+  isLoading: boolean;
 }
 
 const SiteContext = createContext<SiteContextType>({ 
   data: defaultData, 
-  updateData: () => {} 
+  updateData: () => {},
+  isLoading: true
 });
 
 export const SiteProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const [data, setData] = useState<SiteData>(() => {
-    try {
-      const saved = localStorage.getItem('alaka_site_data');
-      return saved ? { ...defaultData, ...JSON.parse(saved) } : defaultData;
-    } catch (e) {
-      return defaultData;
-    }
-  });
+  const [data, setData] = useState<SiteData>(defaultData);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const updateData = (newData: Partial<SiteData>) => {
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!supabase) {
+        // Fallback to localStorage
+        try {
+          const saved = localStorage.getItem('alaka_site_data');
+          if (saved) setData({ ...defaultData, ...JSON.parse(saved) });
+        } catch (e) {
+          console.error(e);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        // Fetch from Supabase
+        const [settingsRes, galleryRes, videosRes, facilitiesRes] = await Promise.all([
+          supabase.from('site_settings').select('*').eq('id', 1).single(),
+          supabase.from('gallery').select('*').order('created_at'),
+          supabase.from('videos').select('*').order('created_at'),
+          supabase.from('facilities').select('*').order('created_at')
+        ]);
+
+        let newData = { ...defaultData };
+
+        if (settingsRes.data) {
+          newData.heroImage = settingsRes.data.hero_image || newData.heroImage;
+          newData.heroTitle1 = settingsRes.data.hero_title_1 || newData.heroTitle1;
+          newData.heroTitle2 = settingsRes.data.hero_title_2 || newData.heroTitle2;
+          newData.heroSubtitle = settingsRes.data.hero_subtitle || newData.heroSubtitle;
+          newData.welcomeImage = settingsRes.data.welcome_image || newData.welcomeImage;
+          newData.principalImage = settingsRes.data.principal_image || newData.principalImage;
+        }
+
+        if (galleryRes.data && galleryRes.data.length > 0) {
+          newData.gallery = galleryRes.data.map((g: any) => g.image_url);
+        }
+
+        if (videosRes.data && videosRes.data.length > 0) {
+          newData.videos = videosRes.data.map((v: any) => ({
+            id: v.id,
+            title: v.title,
+            url: v.video_url
+          }));
+        }
+
+        if (facilitiesRes.data && facilitiesRes.data.length > 0) {
+          newData.facilities = facilitiesRes.data.map((f: any) => ({
+            id: f.id,
+            title: f.title,
+            description: f.description,
+            image1: f.image_1,
+            image2: f.image_2,
+            reverse: f.is_reverse
+          }));
+        }
+
+        setData(newData);
+      } catch (error) {
+        console.error("Error fetching from supabase:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const updateData = async (newData: Partial<SiteData>) => {
     const updated = { ...data, ...newData };
     setData(updated);
+    
+    if (!supabase) {
+      try {
+        localStorage.setItem('alaka_site_data', JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Could not save to localStorage.");
+      }
+      return;
+    }
+
     try {
-      localStorage.setItem('alaka_site_data', JSON.stringify(updated));
-    } catch (e) {
-      console.warn("Could not save to localStorage. It might be full.");
+      // If site settings changed
+      if (
+        newData.heroImage !== undefined || newData.heroTitle1 !== undefined ||
+        newData.heroTitle2 !== undefined || newData.heroSubtitle !== undefined ||
+        newData.welcomeImage !== undefined || newData.principalImage !== undefined
+      ) {
+        await supabase.from('site_settings').upsert({
+          id: 1,
+          hero_image: updated.heroImage,
+          hero_title_1: updated.heroTitle1,
+          hero_title_2: updated.heroTitle2,
+          hero_subtitle: updated.heroSubtitle,
+          welcome_image: updated.welcomeImage,
+          principal_image: updated.principalImage
+        });
+      }
+
+      // If gallery changed
+      if (newData.gallery !== undefined) {
+        await supabase.from('gallery').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (updated.gallery.length > 0) {
+          await supabase.from('gallery').insert(
+            updated.gallery.map(url => ({ image_url: url }))
+          );
+        }
+      }
+
+      // If videos changed
+      if (newData.videos !== undefined) {
+        await supabase.from('videos').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (updated.videos.length > 0) {
+          await supabase.from('videos').insert(
+            updated.videos.map(v => ({ title: v.title, video_url: v.url }))
+          );
+        }
+      }
+
+      // If facilities changed
+      if (newData.facilities !== undefined) {
+        await supabase.from('facilities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (updated.facilities.length > 0) {
+          await supabase.from('facilities').insert(
+            updated.facilities.map(f => ({
+              title: f.title,
+              description: f.description,
+              image_1: f.image1,
+              image_2: f.image2,
+              is_reverse: f.reverse
+            }))
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error updating Supabase:", error);
     }
   };
 
   return (
-    <SiteContext.Provider value={{ data, updateData }}>
+    <SiteContext.Provider value={{ data, updateData, isLoading }}>
       {children}
     </SiteContext.Provider>
   );
