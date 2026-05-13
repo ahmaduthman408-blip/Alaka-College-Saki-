@@ -4,9 +4,6 @@ const envUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseUrl = envUrl ? envUrl.replace(/\/rest\/v1\/?$/, '') : undefined;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
-console.log("Supabase URL loaded:", !!supabaseUrl);
-console.log("Supabase Key loaded:", !!supabaseAnonKey);
-
 export const supabase = supabaseUrl && supabaseAnonKey 
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
